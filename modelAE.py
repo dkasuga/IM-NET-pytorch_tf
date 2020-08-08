@@ -23,19 +23,19 @@ class generator(tf.keras.Model):
         # self.linear_1 = tf.keras.Dense(
         #     self.z_dim+self.point_dim, self.gf_dim*8, bias=True)
         self.linear_1 = tf.keras.Dense(
-            self.gf_dim * 8, bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
+            self.gf_dim * 8, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
         self.linear_2 = tf.keras.Dense(
-            self.gf_dim * 8, bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
+            self.gf_dim * 8, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
         self.linear_3 = tf.keras.Dense(
-            self.gf_dim * 8, bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
+            self.gf_dim * 8, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
         self.linear_4 = tf.keras.Dense(
             self.gf_dim * 4, bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
         self.linear_5 = tf.keras.Dense(
             self.gf_dim * 2, bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
         self.linear_6 = tf.keras.Dense(
-            self.gf_dim * 1, bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
+            self.gf_dim * 1, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
         self.linear_7 = tf.keras.Dense(
-            self.gf_dim * 1, bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(1e-5, 0.02), bias_initializer='zeros')
+            self.gf_dim * 1, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(1e-5, 0.02), bias_initializer='zeros')
 
         self.leaky_relu = tf.keras.layers.LeakyReLU()
 
