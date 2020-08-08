@@ -8,13 +8,6 @@ import random
 import numpy as np
 import h5py
 
-import torch
-import torch.backends.cudnn as cudnn
-import torch.nn as nn
-import torch.nn.functional as F
-from torch import optim
-from torch.autograd import Variable
-
 import mcubes
 
 from utils import *
@@ -71,7 +64,6 @@ class generator(tf.keras.Model):
 
         l7 = self.linear_7(l6)
 
-        #l7 = torch.clamp(l7, min=0, max=1)
         l7 = tf.math.maximum(tf.math.minimum(l7, l7*0.01+0.99), l7*0.01)
 
         return l7
@@ -130,17 +122,17 @@ class im_network(tf.kera.Model):
         self.encoder = encoder(self.ef_dim, self.z_dim)
         self.generator = generator(self.z_dim, self.point_dim, self.gf_dim)
 
-    def forward(self, inputs, z_vector, point_coord, is_training=False):
-        if is_training:
-            z_vector = self.encoder(inputs, is_training=is_training)
+    def __call__(self, inputs, z_vector, point_coord, training=False):
+        if training:
+            z_vector = self.encoder(inputs, training=training)
             net_out = self.generator(
-                point_coord, z_vector, is_training=is_training)
+                point_coord, z_vector, training=training)
         else:
             if inputs is not None:
-                z_vector = self.encoder(inputs, is_training=is_training)
+                z_vector = self.encoder(inputs, training=training)
             if z_vector is not None and point_coord is not None:
                 net_out = self.generator(
-                    point_coord, z_vector, is_training=is_training)
+                    point_coord, z_vector, training=training)
             else:
                 net_out = None
 
@@ -180,11 +172,11 @@ class IM_AE(object):
         self.checkpoint_dir = config.checkpoint_dir
         self.data_dir = config.data_dir
 
-        data_hdf5_name = self.data_dir+'/'+self.dataset_load+'.hdf5'
+        data_hdf5_name = self.data_dir + '/'+self.dataset_load + '.hdf5'
         if os.path.exists(data_hdf5_name):
             data_dict = h5py.File(data_hdf5_name, 'r')
             self.data_points = (
-                data_dict['points_'+str(self.sample_vox_size)][:].astype(np.float32)+0.5)/256-0.5
+                data_dict['points_' + str(self.sample_vox_size)][:].astype(np.float32)+0.5)/256-0.5
             self.data_values = data_dict['values_' +
                                          str(self.sample_vox_size)][:].astype(np.float32)
             self.data_voxels = data_dict['voxels'][:]
@@ -195,23 +187,18 @@ class IM_AE(object):
             print("error: cannot load "+data_hdf5_name)
             exit(0)
 
-        if torch.cuda.is_available():
-            self.device = torch.device('cuda')
-            torch.backends.cudnn.benchmark = True
-        else:
-            self.device = torch.device('cpu')
-
         # build model
         self.im_network = im_network(
             self.ef_dim, self.gf_dim, self.z_dim, self.point_dim)
-        self.im_network.to(self.device)
-        # print params
-        # for param_tensor in self.im_network.state_dict():
-        #	print(param_tensor, "\t", self.im_network.state_dict()[param_tensor].size())
+        self.im_network
+
+        # TODO:
         self.optimizer = torch.optim.Adam(self.im_network.parameters(
         ), lr=config.learning_rate, betas=(config.beta1, 0.999))
+
         # pytorch does not have a checkpoint manager
         # have to define it myself to manage max num of checkpoints to keep
+        # TODO:
         self.max_to_keep = 2
         self.checkpoint_path = os.path.join(
             self.checkpoint_dir, self.model_dir)
@@ -221,7 +208,7 @@ class IM_AE(object):
         # loss
 
         def network_loss(G, point_value):
-            return torch.mean((G-point_value)**2)
+            return tf.reduce_mean((G-point_value)**2)
         self.loss = network_loss
 
         # keep everything a power of 2
@@ -261,8 +248,7 @@ class IM_AE(object):
         self.coords = (self.coords.astype(np.float32)+0.5)/dim-0.5
         self.coords = np.reshape(
             self.coords, [multiplier3, self.test_point_batch_size, 3])
-        self.coords = torch.from_numpy(self.coords)
-        self.coords = self.coords.to(self.device)
+        self.coords = tf.convert_to_tensor(self.coords)
 
         # get coords for testing
         dimc = self.cell_grid_size
@@ -314,6 +300,7 @@ class IM_AE(object):
         return "{}_ae_{}".format(self.dataset_name, self.input_size)
 
     def train(self, config):
+        # TODO:
         # load previous checkpoint
         checkpoint_txt = os.path.join(self.checkpoint_path, "checkpoint")
         if os.path.exists(checkpoint_txt):
@@ -339,6 +326,7 @@ class IM_AE(object):
         point_batch_num = int(self.load_point_batch_size/self.point_batch_size)
 
         for epoch in range(0, training_epoch):
+            # training
             self.im_network.train()
             np.random.shuffle(batch_index_list)
             avg_loss_sp = 0
@@ -357,17 +345,14 @@ class IM_AE(object):
                     point_value = self.data_values[dxb, which_batch*self.point_batch_size:(
                         which_batch+1)*self.point_batch_size]
 
-                batch_voxels = torch.from_numpy(batch_voxels)
-                point_coord = torch.from_numpy(point_coord)
-                point_value = torch.from_numpy(point_value)
+                batch_voxels = tf.convert_to_tensor(batch_voxels)
+                point_coord = tf.convert_to_tensor(point_coord)
+                point_value = tf.convert_to_tensor(point_value)
 
-                batch_voxels = batch_voxels.to(self.device)
-                point_coord = point_coord.to(self.device)
-                point_value = point_value.to(self.device)
-
+                # TODO:
                 self.im_network.zero_grad()
                 _, net_out = self.im_network(
-                    batch_voxels, None, point_coord, is_training=True)
+                    batch_voxels, None, point_coord, training=True)
                 errSP = self.loss(net_out, point_value)
 
                 errSP.backward()
@@ -383,6 +368,7 @@ class IM_AE(object):
             if epoch % 20 == 19:
                 if not os.path.exists(self.checkpoint_path):
                     os.makedirs(self.checkpoint_path)
+                # TODO:
                 save_dir = os.path.join(
                     self.checkpoint_path, self.checkpoint_name+str(self.sample_vox_size)+"-"+str(epoch)+".pth")
                 self.checkpoint_manager_pointer = (
@@ -393,6 +379,7 @@ class IM_AE(object):
                         os.remove(
                             self.checkpoint_manager_list[self.checkpoint_manager_pointer])
                 # save checkpoint
+                # TODO:
                 torch.save(self.im_network.state_dict(), save_dir)
                 # update checkpoint manager
                 self.checkpoint_manager_list[self.checkpoint_manager_pointer] = save_dir
@@ -409,6 +396,7 @@ class IM_AE(object):
 
         if not os.path.exists(self.checkpoint_path):
             os.makedirs(self.checkpoint_path)
+        # TODO:
         save_dir = os.path.join(self.checkpoint_path, self.checkpoint_name +
                                 str(self.sample_vox_size)+"-"+str(epoch)+".pth")
         self.checkpoint_manager_pointer = (
@@ -419,6 +407,7 @@ class IM_AE(object):
                 os.remove(
                     self.checkpoint_manager_list[self.checkpoint_manager_pointer])
         # save checkpoint
+        # TODO:
         torch.save(self.im_network.state_dict(), save_dir)
         # update checkpoint manager
         self.checkpoint_manager_list[self.checkpoint_manager_pointer] = save_dir
@@ -435,25 +424,24 @@ class IM_AE(object):
     def test_1(self, config, name):
         multiplier = int(self.frame_grid_size/self.test_size)
         multiplier2 = multiplier*multiplier
-        self.im_network.eval()
+        # TODO:
+        # self.im_network.eval()
         t = np.random.randint(len(self.data_voxels))
         model_float = np.zeros(
             [self.frame_grid_size+2, self.frame_grid_size+2, self.frame_grid_size+2], np.float32)
         batch_voxels = self.data_voxels[t:t+1].astype(np.float32)
-        batch_voxels = torch.from_numpy(batch_voxels)
-        batch_voxels = batch_voxels.to(self.device)
+        batch_voxels = tf.convert_to_tensor(batch_voxels)
         z_vector, _ = self.im_network(
-            batch_voxels, None, None, is_training=False)
+            batch_voxels, None, None, training=False)
         for i in range(multiplier):
             for j in range(multiplier):
                 for k in range(multiplier):
                     minib = i*multiplier2+j*multiplier+k
                     point_coord = self.coords[minib:minib+1]
                     _, net_out = self.im_network(
-                        None, z_vector, point_coord, is_training=False)
-                    #net_out = torch.clamp(net_out, min=0, max=1)
+                        None, z_vector, point_coord, training=False)
                     model_float[self.aux_x+i+1, self.aux_y+j+1, self.aux_z+k+1] = np.reshape(
-                        net_out.detach().cpu().numpy(), [self.test_size, self.test_size, self.test_size])
+                        net_out.numpy(), [self.test_size, self.test_size, self.test_size])
 
         vertices, triangles = mcubes.marching_cubes(
             model_float, self.sampling_threshold)
@@ -480,11 +468,10 @@ class IM_AE(object):
             point_coord = self.frame_coords[i*self.test_point_batch_size:(
                 i+1)*self.test_point_batch_size]
             point_coord = np.expand_dims(point_coord, axis=0)
-            point_coord = torch.from_numpy(point_coord)
-            point_coord = point_coord.to(self.device)
+            point_coord = tf.convert_to_tensor(point_coord)
             _, model_out_ = self.im_network(
-                None, z, point_coord, is_training=False)
-            model_out = model_out_.detach().cpu().numpy()[0]
+                None, z, point_coord, training=False)
+            model_out = model_out_.numpy()[0]
             x_coords = self.frame_x[i *
                                     self.test_point_batch_size:(i+1)*self.test_point_batch_size]
             y_coords = self.frame_y[i *
@@ -524,11 +511,10 @@ class IM_AE(object):
                     self.cell_coords[point[0]-1, point[1]-1, point[2]-1])
             cell_coords = np.concatenate(cell_coords, axis=0)
             cell_coords = np.expand_dims(cell_coords, axis=0)
-            cell_coords = torch.from_numpy(cell_coords)
-            cell_coords = cell_coords.to(self.device)
+            cell_coords = tf.convert_to_tensor(cell_coords)
             _, model_out_batch_ = self.im_network(
-                None, z, cell_coords, is_training=False)
-            model_out_batch = model_out_batch_.detach().cpu().numpy()[0]
+                None, z, cell_coords, training=False)
+            model_out_batch = model_out_batch_.numpy()[0]
             for i in range(batch_num):
                 point = point_list[i]
                 model_out = model_out_batch[i *
@@ -561,11 +547,10 @@ class IM_AE(object):
         new_vertices = np.copy(vertices)
 
         new_vertices_ = np.expand_dims(new_vertices, axis=0)
-        new_vertices_ = torch.from_numpy(new_vertices_)
-        new_vertices_ = new_vertices_.to(self.device)
+        new_vertices_ = tf.convert_to_tensor(new_vertices_)
         _, new_v_out_ = self.im_network(
-            None, z, new_vertices_, is_training=False)
-        new_v_out = new_v_out_.detach().cpu().numpy()[0]
+            None, z, new_vertices_, training=False)
+        new_v_out = new_v_out_.numpy()[0]
 
         for iter in range(iteration):
             for i in [-1, 0, 1]:
@@ -578,11 +563,11 @@ class IM_AE(object):
                         current_vertices = vertices+offset
                         current_vertices_ = np.expand_dims(
                             current_vertices, axis=0)
-                        current_vertices_ = torch.from_numpy(current_vertices_)
-                        current_vertices_ = current_vertices_.to(self.device)
+                        current_vertices_ = tf.convert_to_tensor(
+                            current_vertices_)
                         _, current_v_out_ = self.im_network(
-                            None, z, current_vertices_, is_training=False)
-                        current_v_out = current_v_out_.detach().cpu().numpy()[
+                            None, z, current_vertices_, training=False)
+                        current_v_out = current_v_out_.numpy()[
                             0]
                         keep_flag = abs(
                             current_v_out-self.sampling_threshold) < abs(new_v_out-self.sampling_threshold)
@@ -604,19 +589,20 @@ class IM_AE(object):
             fin = open(checkpoint_txt)
             model_dir = fin.readline().strip()
             fin.close()
+            # TODO:
             self.im_network.load_state_dict(torch.load(model_dir))
             print(" [*] Load SUCCESS")
         else:
             print(" [!] Load failed...")
             return
 
+        # TODO:
         self.im_network.eval()
         for t in range(config.start, min(len(self.data_voxels), config.end)):
             batch_voxels_ = self.data_voxels[t:t+1].astype(np.float32)
-            batch_voxels = torch.from_numpy(batch_voxels_)
-            batch_voxels = batch_voxels.to(self.device)
+            batch_voxels = tf.convert_to_tensor(batch_voxels_)
             model_z, _ = self.im_network(
-                batch_voxels, None, None, is_training=False)
+                batch_voxels, None, None, training=False)
             model_float = self.z2voxel(model_z)
 
             vertices, triangles = mcubes.marching_cubes(
@@ -643,13 +629,13 @@ class IM_AE(object):
             print(" [!] Load failed...")
             return
 
-        self.im_network.eval()
+        # TODO:
+        # self.im_network.eval()
         for t in range(config.start, min(len(self.data_voxels), config.end)):
             batch_voxels_ = self.data_voxels[t:t+1].astype(np.float32)
-            batch_voxels = torch.from_numpy(batch_voxels_)
-            batch_voxels = batch_voxels.to(self.device)
+            batch_voxels = tf.convert_to_tensor(batch_voxels_)
             model_z, _ = self.im_network(
-                batch_voxels, None, None, is_training=False)
+                batch_voxels, None, None, training=False)
             model_float = self.z2voxel(model_z)
 
             vertices, triangles = mcubes.marching_cubes(
@@ -677,6 +663,7 @@ class IM_AE(object):
             fin = open(checkpoint_txt)
             model_dir = fin.readline().strip()
             fin.close()
+            # TODO:
             self.im_network.load_state_dict(torch.load(model_dir))
             print(" [*] Load SUCCESS")
         else:
@@ -689,20 +676,19 @@ class IM_AE(object):
         hdf5_file = h5py.File(hdf5_path, mode='w')
         hdf5_file.create_dataset("zs", [shape_num, self.z_dim], np.float32)
 
-        self.im_network.eval()
         print(shape_num)
         for t in range(shape_num):
             batch_voxels = self.data_voxels[t:t+1].astype(np.float32)
-            batch_voxels = torch.from_numpy(batch_voxels)
-            batch_voxels = batch_voxels.to(self.device)
+            batch_voxels = tf.convert_to_tensor(batch_voxels)
             out_z, _ = self.im_network(
-                batch_voxels, None, None, is_training=False)
-            hdf5_file["zs"][t:t+1, :] = out_z.detach().cpu().numpy()
+                batch_voxels, None, None, training=False)
+            hdf5_file["zs"][t:t+1, :] = out_z.numpy()
 
         hdf5_file.close()
         print("[z]")
 
     def test_z(self, config, batch_z, dim):
+        # TODO:
         could_load, checkpoint_counter = self.load(self.checkpoint_dir)
         if could_load:
             print(" [*] Load SUCCESS")
@@ -712,8 +698,7 @@ class IM_AE(object):
 
         for t in range(batch_z.shape[0]):
             model_z = batch_z[t:t+1]
-            model_z = torch.from_numpy(model_z)
-            model_z = model_z.to(self.device)
+            model_z = tf.convert_to_tensor(model_z)
             model_float = self.z2voxel(model_z)
             #img1 = np.clip(np.amax(model_float, axis=0)*256, 0,255).astype(np.uint8)
             #img2 = np.clip(np.amax(model_float, axis=1)*256, 0,255).astype(np.uint8)
