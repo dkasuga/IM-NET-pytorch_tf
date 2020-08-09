@@ -75,21 +75,19 @@ class encoder(tf.keras.Model):
         self.ef_dim = ef_dim
         self.z_dim = z_dim
         self.conv_1 = tf.keras.layers.Conv3D(
-            self.ef_dim, 4, stride=2, padding='valid', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
+            self.ef_dim, 4, stride=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
         self.in_1 = tfa.layers.InstanceNormalization()
         self.conv_2 = tf.keras.layers.Conv3D(
-            self.ef_dim * 2, 4, stride=2, padding='valid', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
+            self.ef_dim * 2, 4, stride=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
         self.in_2 = tfa.layers.InstanceNormalization()
         self.conv_3 = tf.keras.layers.Conv3D(
-            self.ef_dim * 4, 4, stride=2, padding='valid', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
+            self.ef_dim * 4, 4, stride=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
         self.in_3 = tfa.layers.InstanceNormalization()
         self.conv_4 = tf.keras.layers.Conv3D(
-            self.ef_dim * 8, 4, stride=2, padding='valid', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
+            self.ef_dim * 8, 4, stride=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
         self.in_4 = tfa.layers.InstanceNormalization()
         self.conv_5 = tf.keras.layers.Conv3D(
             self.z_dim, 4, stride=2, padding='same', use_bias=True, kernel_initializer=tf.initializers.GlorotUniform(), bias_initializer='zeros')
-        self.conv_5 = nn.Conv3d(self.ef_dim * 8, self.z_dim,
-                                4, stride=1, padding=0, bias=True)
 
     def __call__(self, inputs, training=False):
         d_1 = self.in_1(self.conv_1(inputs), training)
