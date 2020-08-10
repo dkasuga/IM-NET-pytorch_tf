@@ -37,8 +37,6 @@ class generator(tf.keras.Model):
         self.linear_7 = tf.keras.Dense(
             self.gf_dim * 1, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(1e-5, 0.02), bias_initializer='zeros')
 
-        self.leaky_relu = tf.keras.layers.LeakyReLU()
-
     def __call__(self, points, z, training=False):
         zs = tf.broadcast_to(tf.reshape(
             z, [-1, 1, self.z_dim]), [1, points.shape[1], 1])
