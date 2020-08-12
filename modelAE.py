@@ -186,14 +186,14 @@ class IM_AE(object):
         # build model
         self.im_network = im_network(
             self.ef_dim, self.gf_dim, self.z_dim, self.point_dim)
-        self.im_network
 
         # TODO:
-        self.optimizer = torch.optim.Adam(self.im_network.parameters(
-        ), lr=config.learning_rate, betas=(config.beta1, 0.999))
+        self.optimizer = tf.keras.optimizers.Adam(
+            learning_rate=config.learning_rate, beta_1=config.beta1, beta_2=0.999)
 
-        # pytorch does not have a checkpoint manager
-        # have to define it myself to manage max num of checkpoints to keep
+        self.ckpt = tf.train.Checkpoint(
+            model=self.in_network, optimizer=self.optimizer)
+
         # TODO:
         self.max_to_keep = 2
         self.checkpoint_path = os.path.join(
@@ -201,8 +201,8 @@ class IM_AE(object):
         self.checkpoint_name = 'IM_AE.model'
         self.checkpoint_manager_list = [None] * self.max_to_keep
         self.checkpoint_manager_pointer = 0
-        # loss
 
+        # loss
         def network_loss(G, point_value):
             return tf.reduce_mean((G-point_value)**2)
         self.loss = network_loss
@@ -303,7 +303,7 @@ class IM_AE(object):
             fin = open(checkpoint_txt)
             model_dir = fin.readline().strip()
             fin.close()
-            self.im_network.load_state_dict(torch.load(model_dir))
+            self.ckpt.restore(model_dir)
             print(" [*] Load SUCCESS")
         else:
             print(" [!] Load failed...")
@@ -346,13 +346,14 @@ class IM_AE(object):
                 point_value = tf.convert_to_tensor(point_value)
 
                 # TODO:
-                self.im_network.zero_grad()
-                _, net_out = self.im_network(
-                    batch_voxels, None, point_coord, training=True)
-                errSP = self.loss(net_out, point_value)
-
-                errSP.backward()
-                self.optimizer.step()
+                with tf.GradientTape() as tape:
+                    _, net_out = self.im_network(
+                        batch_voxels, None, point_coord, training=True)
+                    errSP = self.loss(net_out, point_value)
+                grad_im_network = tape.gradient(
+                    errSP, im_network.trainable_weights)
+                self.optimizer.apply_gradients(
+                    zip(grad_im_network, im_network.trainable_weights))
 
                 avg_loss_sp += errSP.item()
                 avg_num += 1
@@ -366,7 +367,7 @@ class IM_AE(object):
                     os.makedirs(self.checkpoint_path)
                 # TODO:
                 save_dir = os.path.join(
-                    self.checkpoint_path, self.checkpoint_name+str(self.sample_vox_size)+"-"+str(epoch)+".pth")
+                    self.checkpoint_path, self.checkpoint_name+str(self.sample_vox_size)+"-"+str(epoch)+".ckpt")
                 self.checkpoint_manager_pointer = (
                     self.checkpoint_manager_pointer+1) % self.max_to_keep
                 # delete checkpoint
@@ -376,7 +377,8 @@ class IM_AE(object):
                             self.checkpoint_manager_list[self.checkpoint_manager_pointer])
                 # save checkpoint
                 # TODO:
-                torch.save(self.im_network.state_dict(), save_dir)
+                self.ckpt.save(save_dir)
+
                 # update checkpoint manager
                 self.checkpoint_manager_list[self.checkpoint_manager_pointer] = save_dir
                 # write file
@@ -394,7 +396,7 @@ class IM_AE(object):
             os.makedirs(self.checkpoint_path)
         # TODO:
         save_dir = os.path.join(self.checkpoint_path, self.checkpoint_name +
-                                str(self.sample_vox_size)+"-"+str(epoch)+".pth")
+                                str(self.sample_vox_size)+"-"+str(epoch)+".ckpt")
         self.checkpoint_manager_pointer = (
             self.checkpoint_manager_pointer+1) % self.max_to_keep
         # delete checkpoint
@@ -404,7 +406,7 @@ class IM_AE(object):
                     self.checkpoint_manager_list[self.checkpoint_manager_pointer])
         # save checkpoint
         # TODO:
-        torch.save(self.im_network.state_dict(), save_dir)
+        self.ckpt.save(save_dir)
         # update checkpoint manager
         self.checkpoint_manager_list[self.checkpoint_manager_pointer] = save_dir
         # write file
@@ -420,8 +422,6 @@ class IM_AE(object):
     def test_1(self, config, name):
         multiplier = int(self.frame_grid_size/self.test_size)
         multiplier2 = multiplier*multiplier
-        # TODO:
-        # self.im_network.eval()
         t = np.random.randint(len(self.data_voxels))
         model_float = np.zeros(
             [self.frame_grid_size+2, self.frame_grid_size+2, self.frame_grid_size+2], np.float32)
@@ -587,13 +587,12 @@ class IM_AE(object):
             fin.close()
             # TODO:
             self.im_network.load_state_dict(torch.load(model_dir))
+            self.ckpt.restore(model_dir)
             print(" [*] Load SUCCESS")
         else:
             print(" [!] Load failed...")
             return
 
-        # TODO:
-        self.im_network.eval()
         for t in range(config.start, min(len(self.data_voxels), config.end)):
             batch_voxels_ = self.data_voxels[t:t+1].astype(np.float32)
             batch_voxels = tf.convert_to_tensor(batch_voxels_)
@@ -625,8 +624,6 @@ class IM_AE(object):
             print(" [!] Load failed...")
             return
 
-        # TODO:
-        # self.im_network.eval()
         for t in range(config.start, min(len(self.data_voxels), config.end)):
             batch_voxels_ = self.data_voxels[t:t+1].astype(np.float32)
             batch_voxels = tf.convert_to_tensor(batch_voxels_)
@@ -660,7 +657,7 @@ class IM_AE(object):
             model_dir = fin.readline().strip()
             fin.close()
             # TODO:
-            self.im_network.load_state_dict(torch.load(model_dir))
+            self.ckpt.restore(model_dir)
             print(" [*] Load SUCCESS")
         else:
             print(" [!] Load failed...")
@@ -683,14 +680,26 @@ class IM_AE(object):
         hdf5_file.close()
         print("[z]")
 
-    def test_z(self, config, batch_z, dim):
-        # TODO:
-        could_load, checkpoint_counter = self.load(self.checkpoint_dir)
-        if could_load:
+    // TODO: IM-GAN
+
+    def test_z(self, config, batch_z, dim): // GAN
+      # TODO:
+      could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+       if could_load:
             print(" [*] Load SUCCESS")
         else:
             print(" [!] Load failed...")
             return
+        # load previous checkpoint
+        checkpoint_txt = os.path.join(self.checkpoint_path, "checkpoint")
+        if os.path.exists(checkpoint_txt):
+            fin = open(checkpoint_txt)
+            model_dir = fin.readline().strip()
+            fin.close()
+            self.ckpt.restore(model_dir)
+            print(" [*] Load SUCCESS")
+        else:
+            print(" [!] Load failed...")
 
         for t in range(batch_z.shape[0]):
             model_z = batch_z[t:t+1]
