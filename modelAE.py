@@ -20,26 +20,29 @@ class generator(tf.keras.Model):
         self.z_dim = z_dim
         self.point_dim = point_dim
         self.gf_dim = gf_dim
-        # self.linear_1 = tf.keras.Dense(
-        #     self.z_dim+self.point_dim, self.gf_dim*8, bias=True)
-        self.linear_1 = tf.keras.Dense(
+        self.linear_1 = tf.keras.layers.Dense(
             self.gf_dim * 8, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
-        self.linear_2 = tf.keras.Dense(
+        self.linear_2 = tf.keras.layers.Dense(
             self.gf_dim * 8, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
-        self.linear_3 = tf.keras.Dense(
+        self.linear_3 = tf.keras.layers.Dense(
             self.gf_dim * 8, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
-        self.linear_4 = tf.keras.Dense(
-            self.gf_dim * 4, bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
-        self.linear_5 = tf.keras.Dense(
-            self.gf_dim * 2, bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
-        self.linear_6 = tf.keras.Dense(
+        self.linear_4 = tf.keras.layers.Dense(
+            self.gf_dim * 4, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
+        self.linear_5 = tf.keras.layers.Dense(
+            self.gf_dim * 2, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
+        self.linear_6 = tf.keras.layers.Dense(
             self.gf_dim * 1, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
-        self.linear_7 = tf.keras.Dense(
+        self.linear_7 = tf.keras.layers.Dense(
             self.gf_dim * 1, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(1e-5, 0.02), bias_initializer='zeros')
 
     def __call__(self, points, z, training=False):
+        print("###################")
+        print("z.shape:")
+        print(z.shape)
+        print("##################")
+
         zs = tf.broadcast_to(tf.reshape(
-            z, [-1, 1, self.z_dim]), [1, points.shape[1], 1])
+            z, [-1, 1, self.z_dim]), [z.shape[0], points.shape[1], self.z_dim])
         pointz = tf.concat([points, zs], axis=2)
 
         l1 = self.linear_1(pointz)
@@ -73,34 +76,60 @@ class encoder(tf.keras.Model):
         self.ef_dim = ef_dim
         self.z_dim = z_dim
         self.conv_1 = tf.keras.layers.Conv3D(
-            self.ef_dim, 4, stride=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
+            self.ef_dim, 4, strides=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
         self.in_1 = tfa.layers.InstanceNormalization()
         self.conv_2 = tf.keras.layers.Conv3D(
-            self.ef_dim * 2, 4, stride=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
+            self.ef_dim * 2, 4, strides=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
         self.in_2 = tfa.layers.InstanceNormalization()
         self.conv_3 = tf.keras.layers.Conv3D(
-            self.ef_dim * 4, 4, stride=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
+            self.ef_dim * 4, 4, strides=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
         self.in_3 = tfa.layers.InstanceNormalization()
         self.conv_4 = tf.keras.layers.Conv3D(
-            self.ef_dim * 8, 4, stride=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
+            self.ef_dim * 8, 4, strides=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
         self.in_4 = tfa.layers.InstanceNormalization()
         self.conv_5 = tf.keras.layers.Conv3D(
-            self.z_dim, 4, stride=2, padding='same', use_bias=True, kernel_initializer=tf.initializers.GlorotUniform(), bias_initializer='zeros')
+            self.z_dim, 4, strides=2, padding='valid', use_bias=True, kernel_initializer=tf.initializers.GlorotUniform(), bias_initializer='zeros')
 
     def __call__(self, inputs, training=False):
-        d_1 = self.in_1(self.conv_1(inputs), training)
+        inputs = tf.reshape(inputs, shape=[32, 64, 64, 64, 1])
+        print("##########################3")
+        print("inputs:")
+        print(inputs.shape)
+        print("##########################3")
+        d_1 = self.in_1(self.conv_1(inputs), training=training)
         d_1 = leaky_relu(d_1, 0.02)
+        print("##########################3")
+        print("d_1:")
+        print(d_1.shape)
+        print("##########################3")
 
-        d_2 = self.in_2(self.conv_2(inputs), training)
+        d_2 = self.in_2(self.conv_2(d_1), training=training)
         d_2 = leaky_relu(d_2, 0.02)
+        print("##########################3")
+        print("d_2:")
+        print(d_2.shape)
+        print("##########################3")
 
-        d_3 = self.in_3(self.conv_3(inputs), training)
+        d_3 = self.in_3(self.conv_3(d_2), training=training)
         d_3 = leaky_relu(d_3, 0.02)
+        print("##########################3")
+        print("d_3:")
+        print(d_3.shape)
+        print("##########################3")
 
-        d_4 = self.in_4(self.conv_4(inputs), training)
+        d_4 = self.in_4(self.conv_4(d_3), training=training)
         d_4 = leaky_relu(d_4, 0.02)
+        print("##########################3")
+        print("d_4:")
+        print(d_4.shape)
+        print("##########################3")
 
         d_5 = self.conv_5(d_4)
+        print("##########################3")
+        print("d_5:")
+        print(d_5.shape)
+        print("##########################3")
+
         d_5 = tf.reshape(d_5, [-1, self.z_dim])
 
         d_5 = tf.keras.activations.sigmoid(d_5)
@@ -108,7 +137,7 @@ class encoder(tf.keras.Model):
         return d_5
 
 
-class im_network(tf.kera.Model):
+class im_network(tf.keras.Model):
     def __init__(self, ef_dim, gf_dim, z_dim, point_dim):
         super(im_network, self).__init__()
         self.ef_dim = ef_dim
@@ -138,9 +167,9 @@ class im_network(tf.kera.Model):
 class IM_AE(object):
     def __init__(self, config):
         # progressive training
-        #1-- (16, 16*16*16)
-        #2-- (32, 16*16*16)
-        #3-- (64, 16*16*16*4)
+        # 1-- (16, 16*16*16)
+        # 2-- (32, 16*16*16)
+        # 3-- (64, 16*16*16*4)
         self.sample_vox_size = config.sample_vox_size
         if self.sample_vox_size == 16:
             self.load_point_batch_size = 16*16*16
@@ -192,7 +221,7 @@ class IM_AE(object):
             learning_rate=config.learning_rate, beta_1=config.beta1, beta_2=0.999)
 
         self.ckpt = tf.train.Checkpoint(
-            model=self.in_network, optimizer=self.optimizer)
+            model=self.im_network, optimizer=self.optimizer)
 
         # TODO:
         self.max_to_keep = 2
@@ -323,7 +352,6 @@ class IM_AE(object):
 
         for epoch in range(0, training_epoch):
             # training
-            self.im_network.train()
             np.random.shuffle(batch_index_list)
             avg_loss_sp = 0
             avg_num = 0
@@ -351,9 +379,9 @@ class IM_AE(object):
                         batch_voxels, None, point_coord, training=True)
                     errSP = self.loss(net_out, point_value)
                 grad_im_network = tape.gradient(
-                    errSP, im_network.trainable_weights)
+                    errSP, self.im_network.trainable_weights)
                 self.optimizer.apply_gradients(
-                    zip(grad_im_network, im_network.trainable_weights))
+                    zip(grad_im_network, self.im_network.trainable_weights))
 
                 avg_loss_sp += errSP.item()
                 avg_num += 1
@@ -586,7 +614,7 @@ class IM_AE(object):
             model_dir = fin.readline().strip()
             fin.close()
             # TODO:
-            self.im_network.load_state_dict(torch.load(model_dir))
+            # self.im_network.load_state_dict(torch.load(model_dir))
             self.ckpt.restore(model_dir)
             print(" [*] Load SUCCESS")
         else:
@@ -603,7 +631,7 @@ class IM_AE(object):
             vertices, triangles = mcubes.marching_cubes(
                 model_float, self.sampling_threshold)
             vertices = (vertices.astype(np.float32)-0.5)/self.real_size-0.5
-            #vertices = self.optimize_mesh(vertices,model_z)
+            # vertices = self.optimize_mesh(vertices,model_z)
             write_ply_triangle(config.sample_dir+"/"+str(t) +
                                "_vox.ply", vertices, triangles)
 
@@ -618,7 +646,7 @@ class IM_AE(object):
             fin = open(checkpoint_txt)
             model_dir = fin.readline().strip()
             fin.close()
-            self.im_network.load_state_dict(torch.load(model_dir))
+            self.ckpt.restore(model_dir)
             print(" [*] Load SUCCESS")
         else:
             print(" [!] Load failed...")
@@ -634,7 +662,7 @@ class IM_AE(object):
             vertices, triangles = mcubes.marching_cubes(
                 model_float, self.sampling_threshold)
             vertices = (vertices.astype(np.float32)-0.5)/self.real_size-0.5
-            #vertices = self.optimize_mesh(vertices,model_z)
+            # vertices = self.optimize_mesh(vertices,model_z)
             write_ply_triangle(config.sample_dir+"/"+str(t) +
                                "_vox.ply", vertices, triangles)
 
@@ -680,12 +708,12 @@ class IM_AE(object):
         hdf5_file.close()
         print("[z]")
 
-    // TODO: IM-GAN
+    # TODO: IM-GAN
 
-    def test_z(self, config, batch_z, dim): // GAN
-      # TODO:
-      could_load, checkpoint_counter = self.load(self.checkpoint_dir)
-       if could_load:
+    def test_z(self, config, batch_z, dim):  # GAN
+        # TODO:
+        could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+        if could_load:
             print(" [*] Load SUCCESS")
         else:
             print(" [!] Load failed...")
@@ -705,9 +733,9 @@ class IM_AE(object):
             model_z = batch_z[t:t+1]
             model_z = tf.convert_to_tensor(model_z)
             model_float = self.z2voxel(model_z)
-            #img1 = np.clip(np.amax(model_float, axis=0)*256, 0,255).astype(np.uint8)
-            #img2 = np.clip(np.amax(model_float, axis=1)*256, 0,255).astype(np.uint8)
-            #img3 = np.clip(np.amax(model_float, axis=2)*256, 0,255).astype(np.uint8)
+            # img1 = np.clip(np.amax(model_float, axis=0)*256, 0,255).astype(np.uint8)
+            # img2 = np.clip(np.amax(model_float, axis=1)*256, 0,255).astype(np.uint8)
+            # img3 = np.clip(np.amax(model_float, axis=2)*256, 0,255).astype(np.uint8)
             # cv2.imwrite(config.sample_dir+"/"+str(t)+"_1t.png",img1)
             # cv2.imwrite(config.sample_dir+"/"+str(t)+"_2t.png",img2)
             # cv2.imwrite(config.sample_dir+"/"+str(t)+"_3t.png",img3)
@@ -715,7 +743,7 @@ class IM_AE(object):
             vertices, triangles = mcubes.marching_cubes(
                 model_float, self.sampling_threshold)
             vertices = (vertices.astype(np.float32)-0.5)/self.real_size-0.5
-            #vertices = self.optimize_mesh(vertices,model_z)
+            # vertices = self.optimize_mesh(vertices,model_z)
             write_ply(config.sample_dir+"/"+"out" +
                       str(t)+".ply", vertices, triangles)
 
