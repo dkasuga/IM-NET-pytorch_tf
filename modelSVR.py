@@ -7,13 +7,6 @@ import random
 import numpy as np
 import h5py
 
-import torch
-import torch.backends.cudnn as cudnn
-import torch.nn as nn
-import torch.nn.functional as F
-from torch import optim
-from torch.autograd import Variable
-
 import mcubes
 
 from utils import *
@@ -26,24 +19,25 @@ class generator(tf.keras.Model):
         self.z_dim = z_dim
         self.point_dim = point_dim
         self.gf_dim = gf_dim
-        self.linear_1 = tf.keras.Dense(
+        self.linear_1 = tf.keras.layers.Dense(
             self.gf_dim*8, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
-        self.linear_2 = tf.keras.Dense(
+        self.linear_2 = tf.keras.layers.Dense(
             self.gf_dim*8, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
-        self.linear_3 = tf.keras.Dense(
+        self.linear_3 = tf.keras.layers.Dense(
             self.gf_dim*8, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
-        self.linear_4 = tf.keras.Dense(
+        self.linear_4 = tf.keras.layers.Dense(
             self.gf_dim*4, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
-        self.linear_5 = tf.keras.Dense(
+        self.linear_5 = tf.keras.layers.Dense(
             self.gf_dim*2, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
-        self.linear_6 = tf.keras.Dense(
+        self.linear_6 = tf.keras.layers.Dense(
             self.gf_dim*1, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
-        self.linear_7 = tf.keras.Dense(1, bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(
+        self.linear_7 = tf.keras.layers.Dense(1, bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(
             1e-5, 0.02), bias_initializer='zeros')
 
     def __call__(self, points, z, training=False):
         zs = tf.broadcast_to(tf.reshape(
-            z, [-1, 1, self.z_dim]), [1, points.shape[1], 1])
+            z, [-1, 1, self.z_dim]), [z.shape[0], points.shape[1], self.z_dim])
+
         pointz = tf.concat([points, zs], axis=2)
 
         l1 = self.linear_1(pointz)
@@ -78,24 +72,24 @@ class resnet_block(tf.keras.Model):
         self.dim_out = dim_out
         if self.dim_in == self.dim_out:
             self.conv_1 = tf.keras.layers.Conv2D(
-                self.dim_out, 3, stride=1, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
+                self.dim_out, 3, strides=1, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
             self.bn_1 = tf.keras.layers.BatchNormalization(
                 momentum=0.1, epsilon=1e-05)
             self.conv_2 = tf.keras.layers.Conv2D(
-                self.dim_out, 3, stride=1, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
+                self.dim_out, 3, strides=1, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
             self.bn_2 = tf.keras.layers.BatchNormalization(
                 momentum=0.1, epsilon=1e-05)
         else:
             self.conv_1 = tf.keras.layers.Conv2D(
-                self.dim_out, 3, stride=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
+                self.dim_out, 3, strides=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
             self.bn_1 = tf.keras.layers.BatchNormalization(
                 momentum=0.1, epsilon=1e-05)
             self.conv_2 = tf.keras.layers.Conv2D(
-                self.dim_out, 3, stride=1, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
+                self.dim_out, 3, strides=1, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
             self.bn_2 = tf.keras.layers.BatchNormalization(
                 momentum=0.1, epsilon=1e-05)
             self.conv_s = tf.keras.layers.Conv2D(
-                self.dim_out, 1, stride=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
+                self.dim_out, 1, strides=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
             self.bn_s = tf.keras.layers.BatchNormalization(
                 momentum=0.1, epsilon=1e-05)
 
@@ -122,7 +116,7 @@ class img_encoder(tf.keras.Model):
         self.img_ef_dim = img_ef_dim
         self.z_dim = z_dim
         self.conv_0 = tf.keras.layers.Conv2D(
-            self.img_ef_dim, 7, stride=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
+            self.img_ef_dim, 7, strides=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
         self.bn_0 = tf.keras.layers.BatchNormalization(
             momentum=0.1, epsilon=1e-05)
 
@@ -136,12 +130,12 @@ class img_encoder(tf.keras.Model):
         self.res_8 = resnet_block(self.img_ef_dim * 8, self.img_ef_dim * 8)
 
         self.conv_9 = tf.keras.layers.Conv2D(
-            self.img_ef_dim * 8, 4, stride=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
+            self.img_ef_dim * 8, 4, strides=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
         self.bn_9 = tf.keras.layers.BatchNormalization(
             momentum=0.1, epsilon=1e-05)
 
         self.conv_10 = tf.keras.layers.Conv2D(
-            self.z_dim, 4, stride=1, padding='same', use_bias=True, kernel_initializer=tf.initializers.GlorotUniform())
+            self.z_dim, 4, strides=1, padding='same', use_bias=True, kernel_initializer=tf.initializers.GlorotUniform())
 
     def __call__(self, view, training=False):
         layer_0 = self.bn_0(self.conv_0(1-view), training)
@@ -253,10 +247,12 @@ class IM_SVR(object):
         # for param_tensor in self.im_network.state_dict():
         #	print(param_tensor, "\t", self.im_network.state_dict()[param_tensor].size())
         # TODO:
-        self.optimizer = torch.optim.Adam(self.im_network.img_encoder.parameters(
-        ), lr=config.learning_rate, betas=(config.beta1, 0.999))
-        # pytorch does not have a checkpoint manager
-        # have to define it myself to manage max num of checkpoints to keep
+        self.optimizer = tf.keras.optimizers.Adam(
+            learning_rate=config.learning_rate, beta_1=config.beta1, beta_2=0.999)
+        self.ckpt = tf.train.Checkpoint(
+            model=self.in_network, optimizer=self.optimizer)
+
+        # TODO:
         self.max_to_keep = 10
         self.checkpoint_path = os.path.join(
             self.checkpoint_dir, self.model_dir)
@@ -375,8 +371,9 @@ class IM_SVR(object):
             model_dir = fin.readline().strip()
             fin.close()
             # TODO:
-            self.im_network.load_state_dict(
-                torch.load(model_dir), strict=False)
+            # self.im_network.load_state_dict(
+            #     torch.load(model_dir), strict=False)
+            self.ckpt.restore(model_dir)
             print(" [*] Load SUCCESS")
         else:
             print(" [!] Load failed...")
@@ -412,13 +409,15 @@ class IM_SVR(object):
                 batch_zs = tf.convert_to_tensor(batch_zs)
 
                 # TODO:
-                self.im_network.zero_grad()
-                z_vector, _ = self.im_network(
-                    batch_view, None, None, training=True)
-                err = self.loss(z_vector, batch_zs)
-
-                err.backward()
-                self.optimizer.step()
+                with tf.GradientTape() as tape:
+                    self.im_network.zero_grad()
+                    z_vector, _ = self.im_network(
+                        batch_view, None, None, training=True)
+                    err = self.loss(z_vector, batch_zs)
+                grad_im_network = tape.gradient(
+                    err, self.im_network.trainable_weights)
+                self.optimizer.apply_gradients(
+                    zip(grad_im_network, self.im_network.trainable_weights))
 
                 avg_loss += err
                 avg_num += 1
@@ -430,7 +429,7 @@ class IM_SVR(object):
                 if not os.path.exists(self.checkpoint_path):
                     os.makedirs(self.checkpoint_path)
                 save_dir = os.path.join(
-                    self.checkpoint_path, self.checkpoint_name+"-"+str(epoch)+".pth")
+                    self.checkpoint_path, self.checkpoint_name+"-"+str(epoch)+".ckpt")
                 self.checkpoint_manager_pointer = (
                     self.checkpoint_manager_pointer+1) % self.max_to_keep
                 # delete checkpoint
@@ -440,7 +439,8 @@ class IM_SVR(object):
                             self.checkpoint_manager_list[self.checkpoint_manager_pointer])
                 # save checkpoint
                 # TODO:
-                torch.save(self.im_network.state_dict(), save_dir)
+                # torch.save(self.im_network.state_dict(), save_dir)
+                self.ckpt.save(save_dir)
                 # update checkpoint manager
                 self.checkpoint_manager_list[self.checkpoint_manager_pointer] = save_dir
                 # write file
@@ -457,7 +457,7 @@ class IM_SVR(object):
         if not os.path.exists(self.checkpoint_path):
             os.makedirs(self.checkpoint_path)
         save_dir = os.path.join(
-            self.checkpoint_path, self.checkpoint_name+"-"+str(training_epoch)+".pth")
+            self.checkpoint_path, self.checkpoint_name+"-"+str(training_epoch)+".ckpt")
         self.checkpoint_manager_pointer = (
             self.checkpoint_manager_pointer+1) % self.max_to_keep
         # delete checkpoint
@@ -467,7 +467,7 @@ class IM_SVR(object):
                     self.checkpoint_manager_list[self.checkpoint_manager_pointer])
         # save checkpoint
         # TODO:
-        torch.save(self.im_network.state_dict(), save_dir)
+        self.ckpt.save(save_dir)
         # update checkpoint manager
         self.checkpoint_manager_list[self.checkpoint_manager_pointer] = save_dir
         # write file
@@ -499,7 +499,7 @@ class IM_SVR(object):
                     point_coord = self.coords[minib:minib+1]
                     _, net_out = self.im_network(
                         None, z_vector, point_coord, training=False)
-                    #net_out = torch.clamp(net_out, min=0, max=1)
+                    # net_out = torch.clamp(net_out, min=0, max=1)
                     model_float[self.aux_x+i+1, self.aux_y+j+1, self.aux_z+k+1] = np.reshape(
                         net_out.numpy(), [self.test_size, self.test_size, self.test_size])
 
@@ -650,7 +650,8 @@ class IM_SVR(object):
             model_dir = fin.readline().strip()
             fin.close()
             # TODO:
-            self.im_network.load_state_dict(torch.load(model_dir))
+            # self.im_network.load_state_dict(torch.load(model_dir))
+            self.ckpt.restore(model_dir)
             print(" [*] Load SUCCESS")
         else:
             print(" [!] Load failed...")
@@ -668,7 +669,7 @@ class IM_SVR(object):
             vertices, triangles = mcubes.marching_cubes(
                 model_float, self.sampling_threshold)
             vertices = (vertices.astype(np.float32)-0.5)/self.real_size-0.5
-            #vertices = self.optimize_mesh(vertices,model_z)
+            # vertices = self.optimize_mesh(vertices,model_z)
             write_ply_triangle(config.sample_dir+"/"+str(t) +
                                "_vox.ply", vertices, triangles)
 
@@ -684,7 +685,8 @@ class IM_SVR(object):
             model_dir = fin.readline().strip()
             fin.close()
             # TODO:
-            self.im_network.load_state_dict(torch.load(model_dir))
+            # self.im_network.load_state_dict(torch.load(model_dir))
+            self.ckpt.restore(model_dir)
             print(" [*] Load SUCCESS")
         else:
             print(" [!] Load failed...")
@@ -702,7 +704,7 @@ class IM_SVR(object):
             vertices, triangles = mcubes.marching_cubes(
                 model_float, self.sampling_threshold)
             vertices = (vertices.astype(np.float32)-0.5)/self.real_size-0.5
-            #vertices = self.optimize_mesh(vertices,model_z)
+            # vertices = self.optimize_mesh(vertices,model_z)
             write_ply_triangle(config.sample_dir+"/"+str(t) +
                                "_vox.ply", vertices, triangles)
 
