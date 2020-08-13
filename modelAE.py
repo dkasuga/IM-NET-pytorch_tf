@@ -13,6 +13,8 @@ import mcubes
 from utils import *
 from utils import leaky_relu
 
+from tqdm import tqdm
+
 
 class generator(tf.keras.Model):
     def __init__(self, z_dim, point_dim, gf_dim):
@@ -33,14 +35,9 @@ class generator(tf.keras.Model):
         self.linear_6 = tf.keras.layers.Dense(
             self.gf_dim * 1, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.02), bias_initializer='zeros')
         self.linear_7 = tf.keras.layers.Dense(
-            self.gf_dim * 1, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(1e-5, 0.02), bias_initializer='zeros')
+            1, use_bias=True, kernel_initializer=tf.keras.initializers.RandomNormal(1e-5, 0.02), bias_initializer='zeros')
 
     def __call__(self, points, z, training=False):
-        print("###################")
-        print("z.shape:")
-        print(z.shape)
-        print("##################")
-
         zs = tf.broadcast_to(tf.reshape(
             z, [-1, 1, self.z_dim]), [z.shape[0], points.shape[1], self.z_dim])
         pointz = tf.concat([points, zs], axis=2)
@@ -91,45 +88,19 @@ class encoder(tf.keras.Model):
             self.z_dim, 4, strides=2, padding='valid', use_bias=True, kernel_initializer=tf.initializers.GlorotUniform(), bias_initializer='zeros')
 
     def __call__(self, inputs, training=False):
-        inputs = tf.reshape(inputs, shape=[32, 64, 64, 64, 1])
-        print("##########################3")
-        print("inputs:")
-        print(inputs.shape)
-        print("##########################3")
         d_1 = self.in_1(self.conv_1(inputs), training=training)
         d_1 = leaky_relu(d_1, 0.02)
-        print("##########################3")
-        print("d_1:")
-        print(d_1.shape)
-        print("##########################3")
 
         d_2 = self.in_2(self.conv_2(d_1), training=training)
         d_2 = leaky_relu(d_2, 0.02)
-        print("##########################3")
-        print("d_2:")
-        print(d_2.shape)
-        print("##########################3")
 
         d_3 = self.in_3(self.conv_3(d_2), training=training)
         d_3 = leaky_relu(d_3, 0.02)
-        print("##########################3")
-        print("d_3:")
-        print(d_3.shape)
-        print("##########################3")
 
         d_4 = self.in_4(self.conv_4(d_3), training=training)
         d_4 = leaky_relu(d_4, 0.02)
-        print("##########################3")
-        print("d_4:")
-        print(d_4.shape)
-        print("##########################3")
 
         d_5 = self.conv_5(d_4)
-        print("##########################3")
-        print("d_5:")
-        print(d_5.shape)
-        print("##########################3")
-
         d_5 = tf.reshape(d_5, [-1, self.z_dim])
 
         d_5 = tf.keras.activations.sigmoid(d_5)
@@ -354,8 +325,8 @@ class IM_AE(object):
             # training
             np.random.shuffle(batch_index_list)
             avg_loss_sp = 0
-            avg_num = 0
-            for idx in range(batch_num):
+            avg_num = 10
+            for idx in tqdm(range(batch_num)):
                 dxb = batch_index_list[idx *
                                        self.shape_batch_size:(idx+1)*self.shape_batch_size]
                 batch_voxels = self.data_voxels[dxb].astype(np.float32)
@@ -369,7 +340,9 @@ class IM_AE(object):
                     point_value = self.data_values[dxb, which_batch*self.point_batch_size:(
                         which_batch+1)*self.point_batch_size]
 
-                batch_voxels = tf.convert_to_tensor(batch_voxels)
+                batch_voxels = batch_voxels.transpose(0, 2, 3, 4, 1)
+
+                batch_voxel = tf.convert_to_tensor(batch_voxels)
                 point_coord = tf.convert_to_tensor(point_coord)
                 point_value = tf.convert_to_tensor(point_value)
 
@@ -383,7 +356,7 @@ class IM_AE(object):
                 self.optimizer.apply_gradients(
                     zip(grad_im_network, self.im_network.trainable_weights))
 
-                avg_loss_sp += errSP.item()
+                avg_loss_sp += errSP
                 avg_num += 1
             print(str(self.sample_vox_size)+" Epoch: [%2d/%2d] time: %4.4f, loss_sp: %.6f" % (
                 epoch, training_epoch, time.time() - start_time, avg_loss_sp/avg_num))
@@ -454,6 +427,7 @@ class IM_AE(object):
         model_float = np.zeros(
             [self.frame_grid_size+2, self.frame_grid_size+2, self.frame_grid_size+2], np.float32)
         batch_voxels = self.data_voxels[t:t+1].astype(np.float32)
+        batch_voxels = batch_voxels.transpose(0, 2, 3, 4, 1)
         batch_voxels = tf.convert_to_tensor(batch_voxels)
         z_vector, _ = self.im_network(
             batch_voxels, None, None, training=False)
@@ -623,6 +597,7 @@ class IM_AE(object):
 
         for t in range(config.start, min(len(self.data_voxels), config.end)):
             batch_voxels_ = self.data_voxels[t:t+1].astype(np.float32)
+            batch_voxels = batch_voxels.transpose(0, 2, 3, 4, 1)
             batch_voxels = tf.convert_to_tensor(batch_voxels_)
             model_z, _ = self.im_network(
                 batch_voxels, None, None, training=False)
@@ -654,6 +629,7 @@ class IM_AE(object):
 
         for t in range(config.start, min(len(self.data_voxels), config.end)):
             batch_voxels_ = self.data_voxels[t:t+1].astype(np.float32)
+            batch_voxels = batch_voxels.transpose(0, 2, 3, 4, 1)
             batch_voxels = tf.convert_to_tensor(batch_voxels_)
             model_z, _ = self.im_network(
                 batch_voxels, None, None, training=False)
@@ -700,6 +676,7 @@ class IM_AE(object):
         print(shape_num)
         for t in range(shape_num):
             batch_voxels = self.data_voxels[t:t+1].astype(np.float32)
+            batch_voxels = batch_voxels.transpose(0, 2, 3, 4, 1)
             batch_voxels = tf.convert_to_tensor(batch_voxels)
             out_z, _ = self.im_network(
                 batch_voxels, None, None, training=False)
