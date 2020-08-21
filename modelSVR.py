@@ -12,6 +12,8 @@ import mcubes
 from utils import *
 from utils import leaky_relu
 
+from tqdm import tqdm
+
 
 class generator(tf.keras.Model):
   def __init__(self, z_dim, point_dim, gf_dim):
@@ -89,22 +91,22 @@ class resnet_block(tf.keras.Model):
       self.bn_2 = tf.keras.layers.BatchNormalization(
           momentum=0.1, epsilon=1e-05)
       self.conv_s = tf.keras.layers.Conv2D(
-          self.dim_out, 1, strides=2, padding='same', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
+          self.dim_out, 1, strides=2, padding='valid', use_bias=False, kernel_initializer=tf.initializers.GlorotUniform())
       self.bn_s = tf.keras.layers.BatchNormalization(
           momentum=0.1, epsilon=1e-05)
 
   def __call__(self, input, training=False):
     if self.dim_in == self.dim_out:
-      output = self.bn_1(self.conv_1(input), training)
+      output = self.bn_1(self.conv_1(input), training=training)
       output = leaky_relu(output, 0.02)
-      output = self.bn_2(self.conv_2(output), training)
+      output = self.bn_2(self.conv_2(output), training=training)
       output = output + input
       output = leaky_relu(output, 0.02)
     else:
-      output = self.bn_1(self.conv_1(input), training)
+      output = self.bn_1(self.conv_1(input), training=training)
       output = leaky_relu(output, 0.02)
-      output = self.bn_2(self.conv_2(output), training)
-      input_ = self.bn_s(self.conv_s(input), training)
+      output = self.bn_2(self.conv_2(output), training=training)
+      input_ = self.bn_s(self.conv_s(input), training=training)
       output = output + input_
       output = leaky_relu(output, 0.02)
     return output
@@ -135,10 +137,11 @@ class img_encoder(tf.keras.Model):
         momentum=0.1, epsilon=1e-05)
 
     self.conv_10 = tf.keras.layers.Conv2D(
-        self.z_dim, 4, strides=1, padding='same', use_bias=True, kernel_initializer=tf.initializers.GlorotUniform())
+        self.z_dim, 4, strides=1, padding='valid', use_bias=True, kernel_initializer=tf.initializers.GlorotUniform())
 
   def __call__(self, view, training=False):
-    layer_0 = self.bn_0(self.conv_0(1-view), training)
+
+    layer_0 = self.bn_0(self.conv_0(1-view), training=training)
     layer_0 = leaky_relu(layer_0, 0.02)
 
     layer_1 = self.res_1(layer_0, training=training)
@@ -153,7 +156,7 @@ class img_encoder(tf.keras.Model):
     layer_7 = self.res_7(layer_6, training=training)
     layer_8 = self.res_8(layer_7, training=training)
 
-    layer_9 = self.bn_9(self.conv_9(layer_8), training)
+    layer_9 = self.bn_9(self.conv_9(layer_8), training=training)
     layer_9 = leaky_relu(layer_9, 0.02)
 
     layer_10 = self.conv_10(layer_9)
@@ -171,7 +174,9 @@ class im_network(tf.keras.Model):
     self.z_dim = z_dim
     self.point_dim = point_dim
     self.img_encoder = img_encoder(self.img_ef_dim, self.z_dim)
-    self.generator = generator(self.z_dim, self.point_dim, self.gf_dim)
+    self.generator = generator(
+        self.z_dim, self.point_dim, self.gf_dim)
+    self.generator.trainable = False
 
   def __call__(self, inputs, z_vector, point_coord, training=False):
     if training:
@@ -230,6 +235,7 @@ class IM_SVR(object):
       dataz_hdf5_name = self.checkpoint_dir+'/' + \
           self.modelAE_dir+'/'+self.dataset_name+'_train_z.hdf5'
       if os.path.exists(dataz_hdf5_name):
+        print("data_hdf5_name:{}".format(dataz_hdf5_name))
         dataz_dict = h5py.File(dataz_hdf5_name, 'r')
         self.data_zs = dataz_dict['zs'][:]
       else:
@@ -250,7 +256,7 @@ class IM_SVR(object):
     self.optimizer = tf.keras.optimizers.Adam(
         learning_rate=config.learning_rate, beta_1=config.beta1, beta_2=0.999)
     self.ckpt = tf.train.Checkpoint(
-        model=self.in_network, optimizer=self.optimizer)
+        model=self.im_network, optimizer=self.optimizer)
 
     # TODO:
     self.max_to_keep = 10
@@ -265,7 +271,7 @@ class IM_SVR(object):
     # loss
 
     def network_loss(pred_z, gt_z):
-      return tf.reduce_mean((pred_z-gt_z)**2)
+      return tf.reduce_mean(tf.math.pow(pred_z-gt_z, 2))
 
     self.loss = network_loss
 
@@ -366,8 +372,13 @@ class IM_SVR(object):
   def train(self, config):
     # load AE weights
     # checkpoint_txt = os.path.join(self.checkpoint_AE_path, "checkpoint")
-    if os.path.exists(self.checkpoint_path):
-      self.ckpt.restore(tf.train.latest_checkpoint(self.checkpoint_path))
+    if os.path.exists(self.checkpoint_AE_path):
+      # print("###############################")
+      # print(tf.train.latest_checkpoint(self.checkpoint_AE_path))
+      # print("###############################")
+      # self.ckpt.restore(tf.train.latest_checkpoint(self.checkpoint_AE_path))
+      self.im_network.generator.load_weights(
+          '/home/mil/kasuga/IM-NET_tf/checkpoint/all_vox256_img_ae_64/IM_AE.model_generator64-400.ckpt')
       print(" [*] Load SUCCESS")
     else:
       print(" [!] Load failed...")
@@ -386,7 +397,7 @@ class IM_SVR(object):
     batch_num = int(shape_num/self.shape_batch_size)
 
     # self.im_network.train()
-    for epoch in range(0, training_epoch):
+    for epoch in tqdm(range(0, training_epoch)):
       np.random.shuffle(batch_index_list)
       avg_loss = 0
       avg_num = 0
@@ -399,19 +410,20 @@ class IM_SVR(object):
             np.float32)/255.0
         batch_zs = self.data_zs[dxb]
 
+        batch_view = batch_view.transpose(0, 2, 3, 1)
+
         batch_view = tf.convert_to_tensor(batch_view)
         batch_zs = tf.convert_to_tensor(batch_zs)
 
         # TODO:
         with tf.GradientTape() as tape:
-          self.im_network.zero_grad()
           z_vector, _ = self.im_network(
               batch_view, None, None, training=True)
           err = self.loss(z_vector, batch_zs)
         grad_im_network = tape.gradient(
-            err, self.im_network.trainable_weights)
+            err, self.im_network.img_encoder.trainable_weights)
         self.optimizer.apply_gradients(
-            zip(grad_im_network, self.im_network.trainable_weights))
+            zip(grad_im_network, self.im_network.img_encoder.trainable_weights))
 
         avg_loss += err
         avg_num += 1
@@ -435,6 +447,10 @@ class IM_SVR(object):
         # TODO:
         # torch.save(self.im_network.state_dict(), save_dir)
         self.ckpt.save(save_dir)
+
+        save_dir_imgencoder = os.path.join(
+            self.checkpoint_path, self.checkpoint_name+"_imgencoder"+"-"+str(epoch)+".ckpt")
+        self.im_network.img_encoder.save_weights(save_dir_imgencoder)
         # update checkpoint manager
         self.checkpoint_manager_list[self.checkpoint_manager_pointer] = save_dir
         # write file
@@ -462,6 +478,10 @@ class IM_SVR(object):
     # save checkpoint
     # TODO:
     self.ckpt.save(save_dir)
+    save_dir_imgencoder = os.path.join(
+        self.checkpoint_path, self.checkpoint_name+"_imgencoder"+"-"+str(epoch)+".ckpt")
+    self.im_network.img_encoder.save_weights(save_dir_imgencoder)
+
     # update checkpoint manager
     self.checkpoint_manager_list[self.checkpoint_manager_pointer] = save_dir
     # write file
@@ -483,6 +503,7 @@ class IM_SVR(object):
         [self.frame_grid_size+2, self.frame_grid_size+2, self.frame_grid_size+2], np.float32)
     batch_view = self.data_pixels[t:t+1,
                                   self.test_idx].astype(np.float32)/255.0
+    batch_view = batch_view.transpose(0, 2, 3, 1)
     batch_view = tf.convert_to_tensor(batch_view)
     z_vector, _ = self.im_network(
         batch_view, None, None, training=False)
@@ -650,6 +671,7 @@ class IM_SVR(object):
     for t in range(config.start, min(len(self.data_pixels), config.end)):
       batch_view_ = self.data_pixels[t:t+1,
                                      self.test_idx].astype(np.float32)/255.0
+      batch_view = batch_view.transpose(0, 2, 3, 1)
       batch_view = tf.convert_to_tensor(batch_view_)
       model_z, _ = self.im_network(
           batch_view, None, None, training=False)
@@ -680,6 +702,7 @@ class IM_SVR(object):
     for t in range(config.start, min(len(self.data_pixels), config.end)):
       batch_view_ = self.data_pixels[t:t+1,
                                      self.test_idx].astype(np.float32)/255.0
+      batch_view = batch_view.transpose(0, 2, 3, 1)
       batch_view = tf.convert_to_tensor(batch_view_)
       model_z, _ = self.im_network(
           batch_view, None, None, training=False)

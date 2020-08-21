@@ -299,7 +299,12 @@ class IM_AE(object):
     # TODO:
     # load previous checkpoint
     if os.path.exists(self.checkpoint_path):
+      print("#######################")
+      print("tf.train.get_checkpoint_state{}".format(
+          tf.train.get_checkpoint_state(self.checkpoint_path, latest_filename=None)))
       self.ckpt.restore(tf.train.latest_checkpoint(self.checkpoint_path))
+      print(tf.train.latest_checkpoint(self.checkpoint_path))
+      print("#######################")
       print(" [*] Load SUCCESS")
     else:
       print(" [!] Load failed...")
@@ -365,6 +370,11 @@ class IM_AE(object):
         # TODO:
         save_dir = os.path.join(
             self.checkpoint_path, self.checkpoint_name+str(self.sample_vox_size)+"-"+str(epoch)+".ckpt")
+        save_dir_encoder = os.path.join(
+            self.checkpoint_path, self.checkpoint_name+"encoder"+str(self.sample_vox_size)+"-"+str(epoch)+".ckpt")
+        save_dir_encoder = os.path.join(
+            self.checkpoint_path, self.checkpoint_name+"encoder"+str(self.sample_vox_size)+"-"+str(epoch)+".ckpt")
+
         self.checkpoint_manager_pointer = (
             self.checkpoint_manager_pointer+1) % self.max_to_keep
         # delete checkpoint
@@ -392,8 +402,14 @@ class IM_AE(object):
     if not os.path.exists(self.checkpoint_path):
       os.makedirs(self.checkpoint_path)
     # TODO:
+    epoch = 400
     save_dir = os.path.join(self.checkpoint_path, self.checkpoint_name +
                             str(self.sample_vox_size)+"-"+str(epoch)+".ckpt")
+    save_dir_encoder = os.path.join(
+        self.checkpoint_path, self.checkpoint_name+"_encoder"+str(self.sample_vox_size)+"-"+str(epoch)+".ckpt")
+    save_dir_generator = os.path.join(
+        self.checkpoint_path, self.checkpoint_name+"_generator"+str(self.sample_vox_size)+"-"+str(epoch)+".ckpt")
+
     self.checkpoint_manager_pointer = (
         self.checkpoint_manager_pointer+1) % self.max_to_keep
     # delete checkpoint
@@ -403,7 +419,10 @@ class IM_AE(object):
             self.checkpoint_manager_list[self.checkpoint_manager_pointer])
     # save checkpoint
     # TODO:
-    self.ckpt.save(save_dir)
+
+    self.im_network.encoder.save_weights(save_dir_encoder)
+    self.im_network.generator.save_weights(save_dir_generator)
+
     # update checkpoint manager
     self.checkpoint_manager_list[self.checkpoint_manager_pointer] = save_dir
     # write file

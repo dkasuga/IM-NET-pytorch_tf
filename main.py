@@ -42,25 +42,25 @@ FLAGS = parser.parse_args()
 
 
 if not os.path.exists(FLAGS.sample_dir):
-    os.makedirs(FLAGS.sample_dir)
+  os.makedirs(FLAGS.sample_dir)
 
 if FLAGS.ae:
-    im_ae = IM_AE(FLAGS)
+  im_ae = IM_AE(FLAGS)
 
-    if FLAGS.train:
-        im_ae.train(FLAGS)
-    elif FLAGS.getz:
-        im_ae.get_z(FLAGS)
-    else:
-        # im_ae.test_mesh(FLAGS)
-        im_ae.test_mesh_point(FLAGS)
+  if FLAGS.train:
+    im_ae.train(FLAGS)
+  elif FLAGS.getz:
+    im_ae.get_z(FLAGS)
+  else:
+    # im_ae.test_mesh(FLAGS)
+    im_ae.test_mesh_point(FLAGS)
 elif FLAGS.svr:
-    im_svr = IM_SVR(FLAGS)
+  im_svr = IM_SVR(FLAGS)
 
-    if FLAGS.train:
-        im_svr.train(FLAGS)
-    else:
-        # im_svr.test_mesh(FLAGS)
-        im_svr.test_mesh_point(FLAGS)
+  if FLAGS.train:
+    im_svr.train(FLAGS)
+  else:
+    # im_svr.test_mesh(FLAGS)
+    im_svr.test_mesh_point(FLAGS)
 else:
-    print("Please specify an operation: ae or svr?")
+  print("Please specify an operation: ae or svr?")
